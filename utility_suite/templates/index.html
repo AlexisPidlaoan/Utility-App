@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Developer &amp; Admin Utility Suite</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>Developer &amp; Admin Utility Suite</h1>
+    <div class="who">
+      Signed in as <strong>{{ username }}</strong>
+      <button class="secondary small" id="logoutBtn" style="margin-left:8px">Log out</button>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="Summary">
+    <div class="stat"><div class="n" id="statLinks">0</div><div class="l">Short links</div></div>
+    <div class="stat"><div class="n" id="statClicks">0</div><div class="l">Total clicks</div></div>
+    <div class="stat"><div class="n" id="statRecords">0</div><div class="l">Stored records</div></div>
+    <div class="stat"><div class="n" id="statMessages">0</div><div class="l">Messages logged</div></div>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="urlPanel" role="tab">URL Shortener</button>
+    <button class="tab" data-tab="fakePanel" role="tab">Fake Data Generator</button>
+    <button class="tab" data-tab="smsPanel" role="tab">SMS &amp; Messaging</button>
+  </nav>
+
+  <!-- ========== URL SHORTENER ========== -->
+  <section id="urlPanel" class="panel active">
+    <div class="card">
+      <h2>Create a short link</h2>
+      <form id="shortenForm">
+        <div class="row">
+          <div class="field" style="flex:3 1 320px">
+            <label for="longUrl">Long URL</label>
+            <input id="longUrl" type="url" placeholder="https://example.com/a/very/long/link" required>
+          </div>
+          <div class="field">
+            <label for="customAlias">Custom alias (optional)</label>
+            <input id="customAlias" placeholder="my-link" maxlength="32">
+          </div>
+          <div class="field" style="flex:1 1 150px">
+            <label for="codeMode">Code style</label>
+            <select id="codeMode">
+              <option value="base62">Base62 (from ID)</option>
+              <option value="random">Random</option>
+            </select>
+          </div>
+          <button type="submit">Shorten</button>
+        </div>
+        <div class="msg" id="urlMsg" role="status"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Your links</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Short link</th><th>Original URL</th><th>Clicks</th><th>Created</th><th></th></tr></thead>
+          <tbody id="urlRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="statsCard" hidden>
+      <h2 id="statsTitle">Click analytics</h2>
+      <div class="split">
+        <div>
+          <strong>Clicks per day (UTC, last 7 days)</strong>
+          <table><tbody id="statsDays"></tbody></table>
+        </div>
+        <div>
+          <strong>Recent clicks</strong>
+          <table><tbody id="statsRecent"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== FAKE DATA ========== -->
+  <section id="fakePanel" class="panel">
+    <div class="card">
+      <h2>Generate mock records</h2>
+      <form id="fakeForm">
+        <div class="row">
+          <div class="field" style="flex:0 1 160px">
+            <label for="fakeCount">Number of records</label>
+            <input id="fakeCount" type="number" min="1" max="500" value="10" required>
+          </div>
+          <div class="field" style="flex:0 1 220px">
+            <label for="fakeLocale">Locale</label>
+            <select id="fakeLocale">
+              <option value="en_PH">Philippines (en_PH)</option>
+              <option value="en_US">United States (en_US)</option>
+            </select>
+          </div>
+          <button type="submit">Generate &amp; save</button>
+        </div>
+        <div class="hint">Each record has 11 fields: first name, last name, sex, birthdate, age, address, city, mobile number, email, job, company. Records are saved to the database.</div>
+        <div class="msg" id="fakeMsg" role="status"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Stored records <span class="hint" id="fakeTotal"></span></h2>
+      <div class="toolbar">
+        <a class="btn secondary small" href="/api/fake-data/export?format=csv">Download CSV</a>
+        <a class="btn secondary small" href="/api/fake-data/export?format=json">Download JSON</a>
+        <span class="spacer"></span>
+        <button class="danger small" id="clearFake">Clear all</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr id="fakeHead"></tr></thead>
+          <tbody id="fakeRows"></tbody>
+        </table>
+      </div>
+      <div class="hint">Showing the 100 most recent records. Exports include everything.</div>
+    </div>
+  </section>
+
+  <!-- ========== SMS & MESSAGING ========== -->
+  <section id="smsPanel" class="panel">
+    <div class="split">
+      <div class="card">
+        <h2>Send a message</h2>
+        <form id="smsForm">
+          <div class="field" style="margin-bottom:12px">
+            <label for="smsTo">Recipient</label>
+            <input id="smsTo" placeholder="09171234567 or +639171234567" required>
+          </div>
+          <div class="field" style="margin-bottom:12px">
+            <label for="smsBody">Message</label>
+            <textarea id="smsBody" rows="4" maxlength="640" required></textarea>
+            <div class="hint" id="smsCounter">0 characters · 1 segment</div>
+          </div>
+          <button type="submit">Dispatch</button>
+          <div class="msg" id="smsMsg" role="status"></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Bulk send to stored fake contacts</h2>
+        <form id="bulkForm">
+          <div class="field" style="margin-bottom:12px">
+            <label for="bulkBody">Message template</label>
+            <textarea id="bulkBody" rows="4" maxlength="640">Hi {first_name}, your account update is ready.</textarea>
+            <div class="hint">Placeholders: {first_name} {last_name} {name}. Sends to your 50 most recent stored records.</div>
+          </div>
+          <button type="submit">Send to stored records</button>
+          <div class="msg" id="bulkMsg" role="status"></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Message log</h2>
+      <div class="toolbar">
+        <label for="statusFilter" style="margin:0">Status</label>
+        <select id="statusFilter">
+          <option value="">All</option>
+          <option value="delivered">Delivered</option>
+          <option value="failed">Failed</option>
+          <option value="sent">Sent</option>
+          <option value="queued">Queued</option>
+        </select>
+        <button class="secondary small" id="refreshLog">Refresh</button>
+        <span class="hint">Simulated delivery: no real SMS is sent. Numbers ending in 0000 always fail; others fail about 10% of the time.</span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>#</th><th>Recipient</th><th>Message</th><th>Segments</th><th>Status</th><th>Queued</th><th>Finished</th><th>Reason</th></tr></thead>
+          <tbody id="logRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

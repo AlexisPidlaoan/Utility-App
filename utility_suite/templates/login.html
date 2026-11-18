@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Utility Suite</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<main class="auth">
+  <div class="card">
+    <h1>Developer &amp; Admin Utility Suite</h1>
+    <p class="sub" id="subtitle">Sign in to continue</p>
+
+    <form id="authForm" autocomplete="on">
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" required minlength="3" maxlength="30">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128">
+        <div class="hint" id="pwHint" hidden>At least 8 characters.</div>
+      </div>
+      <button type="submit" id="submitBtn">Sign in</button>
+      <div class="msg err" id="error" role="alert"></div>
+    </form>
+
+    <div class="switch">
+      <span id="switchText">No account yet?</span>
+      <button type="button" id="switchBtn">Create one</button>
+    </div>
+  </div>
+</main>
+
+<script>
+  let mode = 'login';
+  const $ = id => document.getElementById(id);
+
+  function render() {
+    const reg = mode === 'register';
+    $('subtitle').textContent = reg ? 'Create your account' : 'Sign in to continue';
+    $('submitBtn').textContent = reg ? 'Create account' : 'Sign in';
+    $('switchText').textContent = reg ? 'Already registered?' : 'No account yet?';
+    $('switchBtn').textContent = reg ? 'Sign in' : 'Create one';
+    $('pwHint').hidden = !reg;
+    $('password').autocomplete = reg ? 'new-password' : 'current-password';
+    $('error').textContent = '';
+  }
+
+  $('switchBtn').addEventListener('click', () => { mode = mode === 'login' ? 'register' : 'login'; render(); });
+
+  $('authForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    $('error').textContent = '';
+    $('submitBtn').disabled = true;
+    try {
+      const res = await fetch('/api/' + mode, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username: $('username').value, password: $('password').value})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Something went wrong');
+      location.href = '/';
+    } catch (err) {
+      $('error').textContent = err.message;
+    } finally {
+      $('submitBtn').disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

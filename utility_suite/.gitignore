@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+utility_suite.db
+utility_suite.db.legacy-*
+.secret_key
