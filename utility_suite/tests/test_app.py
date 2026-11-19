@@ -178,6 +178,85 @@ class FakeDataTests(unittest.TestCase):
         other = make_client("other_" + self.id().split(".")[-1][:15])
         self.assertEqual(other.get("/api/fake-data").get_json()["total"], 0)
 
+    # ----- choosing which fields to generate (1 to 16 columns) -----
+    def _generate(self, client=None, **body):
+        return (client or self.c).post("/api/fake-data/generate", json=body)
+
+    def test_user_picks_only_name_birthdate_and_address(self):
+        res = self._generate(count=10, fields=["address", "first_name", "birthdate"])    # any order
+        self.assertEqual(res.status_code, 201)
+        body = res.get_json()
+        self.assertEqual(body["fields"], ["first_name", "birthdate", "address"])         # standard order
+        for rec in body["records"]:
+            self.assertEqual(set(rec), {"first_name", "birthdate", "address"})
+        listed = self.c.get("/api/fake-data").get_json()
+        self.assertEqual(listed["fields"], ["first_name", "birthdate", "address"])
+        self.assertEqual(listed["total"], 10)
+        # the fields that were not picked are really empty (NULL) in SQLite
+        conn = sqlite3.connect(app.config["DATABASE"])
+        unpicked = [f for f in FIELDS if f not in ("first_name", "birthdate", "address")]
+        for field in unpicked:
+            filled = conn.execute(f"SELECT COUNT(*) FROM fake_records WHERE batch_id = ? AND {field} IS NOT NULL",
+                                  (body["batch_id"],)).fetchone()[0]
+            self.assertEqual(filled, 0, field)
+        conn.close()
+
+    def test_two_users_can_pick_different_fields(self):
+        other = make_client("other_" + self.id().split(".")[-1][:15])
+        self._generate(count=10, fields=["first_name", "birthdate", "address"])
+        self._generate(client=other, count=10, fields=["age", "last_name"])
+        self.assertEqual(self.c.get("/api/fake-data").get_json()["fields"], ["first_name", "birthdate", "address"])
+        self.assertEqual(other.get("/api/fake-data").get_json()["fields"], ["last_name", "age"])
+        header = next(csv.reader(io.StringIO(other.get("/api/fake-data/export?format=csv").get_data(as_text=True))))
+        self.assertEqual(header, ["last_name", "age"])
+        first = other.get("/api/fake-data/export?format=json").get_json()[0]
+        self.assertEqual(set(first), {"last_name", "age"})
+
+    def test_one_field_and_all_sixteen_fields_work(self):
+        self.assertEqual(len(FIELDS), 16)
+        self.assertEqual(len(set(FIELDS)), 16)
+        one = self._generate(count=3, fields=["email"]).get_json()
+        self.assertEqual(one["fields"], ["email"])
+        self.assertTrue(all(set(r) == {"email"} for r in one["records"]))
+        everything = self._generate(count=3, fields=list(FIELDS)).get_json()
+        self.assertEqual(everything["fields"], FIELDS)
+        for rec in everything["records"]:
+            self.assertEqual(len(rec), 16)
+            self.assertEqual(rec["full_name"], f"{rec['first_name']} {rec['last_name']}")
+            self.assertIn(rec["country"], ("Philippines", "United States"))
+
+    def test_invalid_field_choices_are_rejected(self):
+        bad_choices = [[], ["nope"], ["email", "nope"], "email", [1], ["email", None], {"a": 1},
+                       ["email); DROP TABLE users;--"]]
+        for bad in bad_choices:
+            self.assertEqual(self._generate(count=2, fields=bad).status_code, 400, bad)
+        self.assertEqual(self.c.get("/api/fake-data").get_json()["total"], 0, "nothing is stored on error")
+        self.assertEqual(self.c.get("/api/stats").status_code, 200, "users table is still intact")
+
+    def test_duplicate_fields_are_ignored_and_omitted_means_all(self):
+        res = self._generate(count=1, fields=["email", "email", "age"]).get_json()
+        self.assertEqual(res["fields"], ["age", "email"])
+        self.assertEqual(self._generate(count=1).get_json()["fields"], FIELDS)
+
+    def test_field_catalog(self):
+        cat = self.c.get("/api/fake-data/fields").get_json()
+        self.assertEqual(cat["max_fields"], 16)
+        self.assertEqual([f["key"] for f in cat["fields"]], FIELDS)
+        self.assertTrue(all(f["label"] for f in cat["fields"]))
+
+    def test_runs_with_different_fields_show_all_used_columns(self):
+        self._generate(count=2, fields=["first_name"])
+        self._generate(count=3, fields=["city"])
+        listed = self.c.get("/api/fake-data").get_json()
+        self.assertEqual(listed["fields"], ["first_name", "city"])
+        self.assertEqual(listed["total"], 5)
+        self.assertEqual(sum(r["city"] is None for r in listed["records"]), 2)
+        rows = list(csv.reader(io.StringIO(self.c.get("/api/fake-data/export?format=csv").get_data(as_text=True))))
+        self.assertEqual(rows[0], ["first_name", "city"])
+        self.assertEqual(len(rows) - 1, 5)
+        self.assertTrue(any(row[0] == "" for row in rows[1:]), "a field that was not picked exports as blank")
+        self.assertTrue(any(row[1] == "" for row in rows[1:]))
+
     def test_csv_formula_guard(self):
         self.assertEqual(csv_safe("=1+1"), "'=1+1")
         self.assertEqual(csv_safe("@SUM(A1)"), "'@SUM(A1)")
@@ -238,6 +317,18 @@ class MessagingTests(unittest.TestCase):
         self.assertNotIn("{first_name}", msgs[0]["message_body"])
         self.assertIn("{unknown}", msgs[0]["message_body"])
 
+    def test_bulk_send_needs_mobile_numbers_but_not_names(self):
+        self.c.post("/api/fake-data/generate", json={"count": 3, "fields": ["city"]})      # no mobile number
+        res = self.c.post("/api/messages/bulk", json={"message": "Hi {first_name}"})
+        self.assertEqual(res.status_code, 400)
+        self.c.post("/api/fake-data/generate", json={"count": 4, "fields": ["mobile_number"]})   # no names
+        res = self.c.post("/api/messages/bulk", json={"message": "Hi {first_name} {last_name} {name}!"})
+        self.assertEqual(res.status_code, 201, res.get_json())
+        self.assertEqual(res.get_json()["attempted"], 4)
+        body = self.c.get("/api/messages").get_json()["messages"][0]["message_body"]
+        self.assertNotIn("{", body)
+        self.assertNotIn("None", body)
+
     def test_html_in_message_is_stored_verbatim_as_data(self):
         payload = "<img src=x onerror=alert(1)>"
         self.c.post("/api/messages/send", json={"recipient": "09171234567", "message": payload})
@@ -263,3 +354,46 @@ class LegacyDatabaseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeRecordsMigrationTests(unittest.TestCase):
+    OLD_TABLE = """
+        CREATE TABLE fake_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, batch_id TEXT NOT NULL,
+            first_name TEXT NOT NULL, last_name TEXT NOT NULL, sex TEXT NOT NULL, birthdate TEXT NOT NULL,
+            age INTEGER NOT NULL, address TEXT NOT NULL, city TEXT NOT NULL, mobile_number TEXT NOT NULL,
+            email TEXT NOT NULL, job TEXT NOT NULL, company TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+        CREATE INDEX idx_fake_user ON fake_records(user_id);"""
+
+    def test_old_eleven_field_table_is_upgraded_and_rows_are_kept(self):
+        path = os.path.join(tempfile.mkdtemp(), "old_fake.db")
+        conn = sqlite3.connect(path)
+        conn.executescript(self.OLD_TABLE)
+        conn.executescript("""
+            CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                                password_hash TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+            INSERT INTO users (id, username, password_hash) VALUES (1, 'ana', 'x');""")
+        conn.execute("INSERT INTO fake_records (user_id, batch_id, first_name, last_name, sex, birthdate, age, "
+                     "address, city, mobile_number, email, job, company) "
+                     "VALUES (1, 'b1', 'Ana', 'Cruz', 'Female', '1990-01-02', 35, '1 Main St', 'Manila', "
+                     "'+63 917 123 4567', 'a@x.com', 'Nurse', 'ACME')")
+        conn.commit()
+        conn.close()
+
+        init_db(path)
+        init_db(path)                      # running it again must change nothing
+
+        conn = sqlite3.connect(path)
+        columns = {r[1]: r for r in conn.execute("PRAGMA table_info(fake_records)")}
+        self.assertEqual(set(columns) - {"id", "user_id", "batch_id", "created_at"}, set(FIELDS))
+        self.assertEqual(columns["first_name"][3], 0, "first_name may now be empty (NULL)")
+        row = conn.execute("SELECT first_name, age, mobile_number, full_name FROM fake_records").fetchone()
+        self.assertEqual(row, ("Ana", 35, "+63 917 123 4567", None))
+        conn.execute("INSERT INTO fake_records (user_id, batch_id, city) VALUES (1, 'b2', 'Cebu')")
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM fake_records").fetchone()[0], 2)
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+        self.assertNotIn("fake_records_old", tables)
+        self.assertIn("idx_fake_user", [r[1] for r in conn.execute("PRAGMA index_list(fake_records)")])
+        conn.close()
+

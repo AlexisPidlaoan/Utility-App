@@ -125,29 +125,56 @@ $('shortenForm').addEventListener('submit', async e => {
 });
 
 // ---------- Fake data ----------
-const FIELD_LABELS = {
-  first_name: 'First name', last_name: 'Last name', sex: 'Sex', birthdate: 'Birthdate', age: 'Age',
-  address: 'Address', city: 'City', mobile_number: 'Mobile', email: 'Email', job: 'Job', company: 'Company'
-};
+let FIELD_LABELS = {};                       // key -> label, loaded from /api/fake-data/fields
+
+const fieldBoxes = () => [...document.querySelectorAll('#fakeFields input')];
+const pickedFields = () => fieldBoxes().filter(b => b.checked).map(b => b.value);
+
+function updateFieldCount() {
+  $('fieldCount').textContent = `(${pickedFields().length} of ${fieldBoxes().length} selected)`;
+}
+
+function setAllFields(on) {
+  fieldBoxes().forEach(b => { b.checked = on; });
+  updateFieldCount();
+}
+
+// Draw one checkbox per field the server offers (the server is the single source of truth).
+const fieldsReady = (async () => {
+  const catalog = await api('/api/fake-data/fields');
+  catalog.fields.forEach(f => { FIELD_LABELS[f.key] = f.label; });
+  $('fakeFields').replaceChildren(...catalog.fields.map(f =>
+    h('label', { class: 'check' },
+      h('input', { type: 'checkbox', value: f.key, checked: true, onchange: updateFieldCount }),
+      f.label)));
+  updateFieldCount();
+})();
+
+$('fieldsAll').addEventListener('click', () => setAllFields(true));
+$('fieldsNone').addEventListener('click', () => setAllFields(false));
 
 async function loadFake() {
-  const data = await api('/api/fake-data');
+  await fieldsReady;
+  const data = await api('/api/fake-data');       // only the columns that hold data
   $('fakeHead').replaceChildren(...data.fields.map(f => h('th', {}, FIELD_LABELS[f] || f)));
   $('fakeTotal').textContent = `(${data.total} total)`;
-  const cellClass = { birthdate: 'nowrap', mobile_number: 'nowrap', address: 'addr' };
+  const cellClass = { birthdate: 'nowrap', mobile_number: 'nowrap', zip_code: 'nowrap', address: 'addr' };
   const rows = data.records.map(r => h('tr', {},
-    data.fields.map(f => h('td', { class: cellClass[f] || '' }, String(r[f])))));
-  fillRows($('fakeRows'), rows, data.fields.length, 'No records yet. Generate some above.');
+    data.fields.map(f => h('td', { class: cellClass[f] || '' }, String(r[f] ?? '')))));
+  fillRows($('fakeRows'), rows, Math.max(1, data.fields.length), 'No records yet. Generate some above.');
 }
 
 $('fakeForm').addEventListener('submit', async e => {
   e.preventDefault();
   try {
+    await fieldsReady;
     const data = await api('/api/fake-data/generate', {
       method: 'POST',
-      body: JSON.stringify({ count: Number($('fakeCount').value), locale: $('fakeLocale').value })
+      body: JSON.stringify({
+        count: Number($('fakeCount').value), locale: $('fakeLocale').value, fields: pickedFields()
+      })
     });
-    show('fakeMsg', `Generated and saved ${data.count} records (batch ${data.batch_id}).`, true);
+    show('fakeMsg', `Generated and saved ${data.count} records with ${data.fields.length} field(s) (batch ${data.batch_id}).`, true);
     await Promise.all([loadFake(), refreshStats()]);
   } catch (err) { show('fakeMsg', err.message, false); }
 });

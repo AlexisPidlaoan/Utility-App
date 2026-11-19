@@ -101,7 +101,15 @@
           </div>
           <button type="submit">Generate &amp; save</button>
         </div>
-        <div class="hint">Each record has 11 fields: first name, last name, sex, birthdate, age, address, city, mobile number, email, job, company. Records are saved to the database.</div>
+        <fieldset class="picker">
+          <legend>Fields to generate <span class="hint" id="fieldCount"></span></legend>
+          <div class="checks" id="fakeFields"></div>
+          <div class="toolbar">
+            <button type="button" class="secondary small" id="fieldsAll">Select all</button>
+            <button type="button" class="secondary small" id="fieldsNone">Clear selection</button>
+          </div>
+        </fieldset>
+        <div class="hint">Pick any of the 16 fields (at least one). Only the ticked fields are generated and saved to the database.</div>
         <div class="msg" id="fakeMsg" role="status"></div>
       </form>
     </div>

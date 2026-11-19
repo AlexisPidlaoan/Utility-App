@@ -31,22 +31,28 @@ CREATE TABLE IF NOT EXISTS url_clicks (
 CREATE INDEX IF NOT EXISTS idx_url_clicks_url ON url_clicks(url_id);
 CREATE INDEX IF NOT EXISTS idx_urls_user ON urls(user_id);
 
--- ---------- 3B.3 Fake Data Generation (11 stored fields) ----------
+-- ---------- 3B.3 Fake Data Generation (16 selectable fields) ----------
+-- Each run stores only the fields the user ticked; every other field stays NULL.
 CREATE TABLE IF NOT EXISTS fake_records (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     batch_id      TEXT NOT NULL,
-    first_name    TEXT NOT NULL,
-    last_name     TEXT NOT NULL,
-    sex           TEXT NOT NULL,
-    birthdate     TEXT NOT NULL,              -- ISO date YYYY-MM-DD
-    age           INTEGER NOT NULL,
-    address       TEXT NOT NULL,
-    city          TEXT NOT NULL,
-    mobile_number TEXT NOT NULL,
-    email         TEXT NOT NULL,
-    job           TEXT NOT NULL,
-    company       TEXT NOT NULL,
+    first_name    TEXT,
+    last_name     TEXT,
+    full_name     TEXT,
+    sex           TEXT,
+    birthdate     TEXT,                       -- ISO date YYYY-MM-DD
+    age           INTEGER,
+    civil_status  TEXT,
+    address       TEXT,
+    city          TEXT,
+    zip_code      TEXT,
+    country       TEXT,
+    mobile_number TEXT,
+    email         TEXT,
+    username      TEXT,
+    job           TEXT,
+    company       TEXT,
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_fake_user ON fake_records(user_id);

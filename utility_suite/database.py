@@ -45,12 +45,42 @@ def _move_legacy_database(path):
         print(f"[init_db] Old-format database moved to {backup}; starting with a fresh one.")
 
 
+# Columns of the old fake_records table (11 fixed fields, all NOT NULL).
+_OLD_FAKE_COLUMNS = ("id, user_id, batch_id, first_name, last_name, sex, birthdate, age, "
+                     "address, city, mobile_number, email, job, company, created_at")
+
+
+def _set_aside_old_fake_records(conn):
+    """If fake_records is the old fixed 11-field table, rename it so the new one can be created.
+
+    The new table lets every field be empty (NULL) because users now pick which fields to generate.
+    SQLite cannot drop a NOT NULL rule, so the table is rebuilt and the rows are copied afterwards.
+    """
+    names = {row[1] for row in conn.execute("PRAGMA table_info(fake_records)")}
+    already_set_aside = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'fake_records_old'").fetchone()
+    if names and "full_name" not in names and not already_set_aside:
+        conn.execute("ALTER TABLE fake_records RENAME TO fake_records_old")
+        conn.execute("DROP INDEX IF EXISTS idx_fake_user")
+
+
+def _restore_old_fake_records(conn):
+    """Copy the rows of a set-aside old table into the new one, then remove the old table."""
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                    "AND name = 'fake_records_old'").fetchone():
+        conn.execute(f"INSERT INTO fake_records ({_OLD_FAKE_COLUMNS}) "
+                     f"SELECT {_OLD_FAKE_COLUMNS} FROM fake_records_old")
+        conn.execute("DROP TABLE fake_records_old")
+
+
 def init_db(path):
-    """Create the tables from schema.sql if they do not exist yet."""
+    """Create the tables from schema.sql if they do not exist yet (and upgrade an old fake_records table)."""
     _move_legacy_database(path)
     conn = sqlite3.connect(path)
+    _set_aside_old_fake_records(conn)
     with open(SCHEMA_FILE, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
+    _restore_old_fake_records(conn)
     conn.commit()
     conn.close()
 

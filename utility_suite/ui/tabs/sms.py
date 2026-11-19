@@ -80,11 +80,10 @@ class SmsTab(BaseTab):
         if problem:
             messagebox.showerror("Invalid message", problem)
             return
-        contacts = self.db.execute(
-            "SELECT first_name, last_name, mobile_number FROM fake_records WHERE user_id = ? "
-            f"ORDER BY id DESC LIMIT {msg.BULK_LIMIT}", (self.user_id,)).fetchall()
+        contacts = msg.load_bulk_contacts(self.db, self.user_id)
         if not contacts:
-            messagebox.showinfo("No contacts", "No stored fake records yet. Generate some first.")
+            messagebox.showinfo("No contacts", "No stored records with a mobile number yet.\n"
+                                "Generate some first (tick the Mobile number field).")
             return
         if not messagebox.askyesno("Bulk send", f"Send this message to {len(contacts)} contacts?"):
             return

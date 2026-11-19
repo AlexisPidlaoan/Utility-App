@@ -50,10 +50,10 @@ def personalize(template, contact):
 
     Plain replace (not str.format), so user text can never break or probe the template.
     """
-    first, last = contact["first_name"], contact["last_name"]
+    first, last = contact["first_name"] or "", contact["last_name"] or ""     # fields can be unpicked
     return (template.replace("{first_name}", first)
                     .replace("{last_name}", last)
-                    .replace("{name}", f"{first} {last}"))
+                    .replace("{name}", f"{first} {last}".strip()))
 
 
 # --------------------------------------------------------------------------
@@ -66,6 +66,17 @@ def simulate_carrier(number):
     if random.random() < FAILURE_RATE:
         return "failed", "Simulated network timeout"
     return "delivered", None
+
+
+def load_bulk_contacts(db, user_id):
+    """The latest stored records that have a mobile number (the only field a message needs).
+
+    Records generated without the Mobile number field cannot be messaged, so they are left out.
+    """
+    return db.execute(
+        "SELECT first_name, last_name, mobile_number FROM fake_records "
+        "WHERE user_id = ? AND mobile_number IS NOT NULL "
+        f"ORDER BY id DESC LIMIT {BULK_LIMIT}", (user_id,)).fetchall()
 
 
 def dispatch_message(db, user_id, number, body):
@@ -116,11 +127,10 @@ def bulk_send():
         return api_error(problem, 400)
 
     db, user_id = get_db(), current_user_id()
-    contacts = db.execute(
-        "SELECT first_name, last_name, mobile_number FROM fake_records "
-        f"WHERE user_id = ? ORDER BY id DESC LIMIT {BULK_LIMIT}", (user_id,)).fetchall()
+    contacts = load_bulk_contacts(db, user_id)
     if not contacts:
-        return api_error("No stored fake records yet. Generate some first.", 400)
+        return api_error("No stored records with a mobile number yet. "
+                         "Generate some first (tick the Mobile number field).", 400)
 
     summary = {"attempted": 0, "delivered": 0, "failed": 0, "skipped": 0}
     for contact in contacts:

@@ -84,7 +84,9 @@ class ShortenerTab(BaseTab):
         if not selection:
             messagebox.showinfo("Select a link", "Click a row in the table first.")
             return None
-        return self.tree.item(selection[0])["values"][0]
+        # tree.set() returns the text as stored. tree.item()["values"] would turn a code such as
+        # "007123" into the number 7123.
+        return self.tree.set(selection[0], "code")
 
     def copy(self):
         code = self._selected_code()
