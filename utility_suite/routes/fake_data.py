@@ -1,8 +1,3 @@
-"""3B.3  Fake data generator: the user picks which of 16 fields to generate (1 to 16 columns).
-
-Only the picked fields are generated and saved to SQLite (the others stay empty), and the table
-and the CSV/JSON exports show only the columns that hold data.
-"""
 import csv
 import io
 import json

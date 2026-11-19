@@ -12,17 +12,14 @@ bp = Blueprint("messaging", __name__)
 
 MAX_MESSAGE_LEN = 640
 STATUSES = ("queued", "sent", "delivered", "failed")
-BULK_LIMIT = 50                         # most recent stored contacts used by a bulk send
-FAILURE_RATE = 0.10                     # share of messages the simulated carrier fails
+BULK_LIMIT = 50
+FAILURE_RATE = 0.10
 
-
-# --------------------------------------------------------------------------
-# Phone numbers and message text
-# --------------------------------------------------------------------------
+# Phone Messaging
 def normalize_number(raw):
     """Return the number in +E.164 form, or None if it is not a plausible mobile number."""
     s = re.sub(r"[\s\-().]", "", str(raw or ""))
-    if re.fullmatch(r"09\d{9}", s):             # Philippine local format
+    if re.fullmatch(r"09\d{9}", s):
         return "+63" + s[1:]
     if re.fullmatch(r"639\d{9}", s):
         return "+" + s
@@ -55,10 +52,7 @@ def personalize(template, contact):
                     .replace("{last_name}", last)
                     .replace("{name}", f"{first} {last}".strip()))
 
-
-# --------------------------------------------------------------------------
 # Sending
-# --------------------------------------------------------------------------
 def simulate_carrier(number):
     """Stand-in for a real provider (e.g. Twilio). Replace this function to go live."""
     if number.endswith("0000"):
@@ -93,10 +87,7 @@ def dispatch_message(db, user_id, number, body):
                "finished_at = CURRENT_TIMESTAMP WHERE id = ?", (status, reason, message_id))
     return status, reason
 
-
-# --------------------------------------------------------------------------
-# Routes
-# --------------------------------------------------------------------------
+# Route
 @bp.post("/api/messages/send")
 @login_required
 def send_message():

@@ -56,7 +56,6 @@ def login():
     user = get_db().execute(
         "SELECT id, username, password_hash FROM users WHERE username = ?", (username,)).fetchone()
 
-    # Always verify a hash, even for unknown users, so timing does not reveal which names exist.
     stored_hash = user["password_hash"] if user else DUMMY_HASH
     password_ok = verify_password(password, stored_hash)
     if not (user and password_ok):

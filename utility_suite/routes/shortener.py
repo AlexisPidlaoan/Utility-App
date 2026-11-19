@@ -19,10 +19,7 @@ RESERVED_CODES = {"api", "login", "logout", "register", "static", "admin", "dash
 CODE_MODES = ("base62", "random")
 MAX_RANDOM_ATTEMPTS = 10
 
-
-# --------------------------------------------------------------------------
 # Code generation and validation
-# --------------------------------------------------------------------------
 def base62_encode(number):
     if number == 0:
         return BASE62[0]
@@ -53,10 +50,7 @@ def validate_alias(alias):
         return "That alias is reserved"
     return None
 
-
-# --------------------------------------------------------------------------
 # Saving a link (one function per way of choosing the short code)
-# --------------------------------------------------------------------------
 def _insert_url(db, user_id, url, code):
     """Insert a link and return its row id, or None if `code` is already taken."""
     try:
@@ -104,10 +98,7 @@ def create_with_base62_code(db, user_id, url):
     db.commit()
     return code
 
-
-# --------------------------------------------------------------------------
 # Routes
-# --------------------------------------------------------------------------
 @bp.post("/api/shorten")
 @login_required
 def shorten():

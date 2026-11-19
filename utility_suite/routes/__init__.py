@@ -1,4 +1,3 @@
-"""Every module in this package is one Flask blueprint, one part of the app."""
 from . import auth, fake_data, messaging, pages, shortener
 
 
